@@ -1,4 +1,91 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Tags on Random thoughts</title><link>https://randthoughts.github.io/tags/</link><description>Recent content in Tags on Random thoughts</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><atom:link href="https://randthoughts.github.io/tags/index.xml" rel="self" type="application/rss+xml"/><item><title>Random wallpaper with just bash and systemd</title><link>https://randthoughts.github.io/random-wallpaper-with-just-bash-and-systemd/</link><pubDate>Thu, 21 Jul 2022 17:08:41 +0200</pubDate><guid>https://randthoughts.github.io/random-wallpaper-with-just-bash-and-systemd/</guid><description>&lt;p>I&amp;rsquo;m a big fan of Variety&lt;sup id="fnref:1">&lt;a href="#fn:1" class="footnote-ref" role="doc-noteref">1&lt;/a>&lt;/sup>, probably the most popular wallpaper changer among Linux users. It&amp;rsquo;s been sitting in my GNOME desktop&amp;rsquo;s system tray for a long time. (Yes, I know GNOME doesn&amp;rsquo;t actually have a system tray, but I can&amp;rsquo;t live without it so I installed Ubuntu&amp;rsquo;s &lt;em>AppIndicator and KStatusNotifierItem Support&lt;/em> extension).&lt;/p>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Tags on Random thoughts</title><link>https://randthoughts.github.io/tags/</link><description>Recent content in Tags on Random thoughts</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><atom:link href="https://randthoughts.github.io/tags/index.xml" rel="self" type="application/rss+xml"/><item><title>Simulating memory load with fio</title><link>https://randthoughts.github.io/simulating-memory-load-with-fio/</link><pubDate>Sat, 20 Aug 2022 14:56:41 +0200</pubDate><guid>https://randthoughts.github.io/simulating-memory-load-with-fio/</guid><description>&lt;p>Recently at work I was tasked with simulating the workload of a client&amp;rsquo;s infrastructure consisting of several virtual machines. For our use case, this turned out to be a largely solved problem, thanks to existing tools like &lt;a href="https://fio.readthedocs.io/en/latest/fio_man.html">fio&lt;/a>.&lt;/p>
+&lt;p>For those who don&amp;rsquo;t know it, fio is a simple yet powerful program that allows simulating various kinds of I/O workloads. Its simplicity stems from two basic facts: (1) it&amp;rsquo;s a standalone, CLI executable and (2) it uses plain INI files to define workloads. It&amp;rsquo;s also powerful because of its extensibility: thanks to I/O engines, it&amp;rsquo;s not limited to just I/O simulation.&lt;/p>
+&lt;p>For example, here&amp;rsquo;s what a CPU-bound workload could look like, using the &lt;code>cpuio&lt;/code> engine:&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-ini" data-lang="ini">&lt;span style="color:#75715e"># File: burn-my-cpu.fio&lt;/span>
+&lt;span style="color:#66d9ef">[burn-my-cpu]&lt;/span>
+&lt;span style="color:#75715e"># Don&amp;#39;t transfer any data, just burn CPU cycles &lt;/span>
+&lt;span style="color:#a6e22e">ioengine&lt;/span>&lt;span style="color:#f92672">=&lt;/span>&lt;span style="color:#e6db74">cpuio&lt;/span>
+&lt;span style="color:#75715e"># Load the CPU at 100%&lt;/span>
+&lt;span style="color:#a6e22e">cpuload&lt;/span>&lt;span style="color:#f92672">=&lt;/span>&lt;span style="color:#e6db74">100&lt;/span>
+&lt;span style="color:#75715e"># Make four clones of this job. In a multiprocessor system, &lt;/span>
+&lt;span style="color:#75715e"># these are run concurrently on multiple CPUs.&lt;/span>
+&lt;span style="color:#a6e22e">numjobs&lt;/span>&lt;span style="color:#f92672">=&lt;/span>&lt;span style="color:#e6db74">4&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>You can run it with the command:&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-bash" data-lang="bash">fio burn-my-cpu.fio
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>The interesting thing here&amp;mdash;beyond the fact that we&amp;rsquo;re stressing the &lt;em>CPU&lt;/em> with an I/O simulation tool&amp;mdash;is &lt;code>numjobs=4&lt;/code>, which instructs fio to fork four processes&amp;mdash;or rather, &lt;em>jobs&lt;/em>, in fio lingo&amp;mdash;executing the same workload. One could also play with the reserved variable &lt;code>$ncpus&lt;/code> to load the desired number of CPUs based on the system at hand.&lt;/p>
+&lt;p>OK, so fio is capable of generating both I/O and CPU workloads. What about memory? Specifically, how can we simulate a certain amount of memory being allocated for a period of time? Note that here I&amp;rsquo;m not interested in the simulation of specific read/write patterns; if that&amp;rsquo;s the case for you, time to close this browser tab I guess.&lt;/p>
+&lt;p>After a bit of trial and error, I came up with the solution below. I&amp;rsquo;m not saying that it&amp;rsquo;s perfect or the right way to do it, but according to my tests™ it does the job:&lt;/p>
+&lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-ini" data-lang="ini">&lt;span style="color:#75715e"># File: fill-my-memory.fio&lt;/span>
+&lt;span style="color:#66d9ef">[fill-my-memory]&lt;/span>
+&lt;span style="color:#75715e"># This may be omitted, as it&amp;#39;s already the default&lt;/span>
+&lt;span style="color:#a6e22e">ioengine&lt;/span>&lt;span style="color:#f92672">=&lt;/span>&lt;span style="color:#e6db74">psync&lt;/span>
+&lt;span style="color:#75715e"># Just read, don&amp;#39;t write anything&lt;/span>
+&lt;span style="color:#a6e22e">readwrite&lt;/span>&lt;span style="color:#f92672">=&lt;/span>&lt;span style="color:#e6db74">read&lt;/span>
+&lt;span style="color:#75715e"># Read from /dev/zero to avoid disk I/O&lt;/span>
+&lt;span style="color:#a6e22e">filename&lt;/span>&lt;span style="color:#f92672">=&lt;/span>&lt;span style="color:#e6db74">/dev/zero&lt;/span>
+&lt;span style="color:#75715e"># Read 1GiB into memory&lt;/span>
+&lt;span style="color:#a6e22e">size&lt;/span>&lt;span style="color:#f92672">=&lt;/span>&lt;span style="color:#e6db74">1g&lt;/span>
+&lt;span style="color:#75715e"># Pin 1GiB of memory with mlock(2)&lt;/span>
+&lt;span style="color:#75715e"># This prevents memory from being paged to the swap area&lt;/span>
+&lt;span style="color:#a6e22e">lockmem&lt;/span>&lt;span style="color:#f92672">=&lt;/span>&lt;span style="color:#e6db74">1g&lt;/span>
+&lt;span style="color:#75715e"># Normally, once the specified size is read, the job terminates&lt;/span>
+&lt;span style="color:#75715e"># To keep it running, we set the run time explicitly&lt;/span>
+&lt;span style="color:#a6e22e">time_based&lt;/span>&lt;span style="color:#f92672">=&lt;/span>&lt;span style="color:#e6db74">1&lt;/span>
+&lt;span style="color:#a6e22e">runtime&lt;/span>&lt;span style="color:#f92672">=&lt;/span>&lt;span style="color:#e6db74">5m&lt;/span>
+&lt;span style="color:#75715e"># Stall the job after it has finished reading 1GiB&lt;/span>
+&lt;span style="color:#75715e"># This avoids wasting CPU cycles&lt;/span>
+&lt;span style="color:#a6e22e">thinktime&lt;/span>&lt;span style="color:#f92672">=&lt;/span>&lt;span style="color:#e6db74">1s&lt;/span>
+&lt;/code>&lt;/pre>&lt;/div>&lt;p>Don&amp;rsquo;t worry, I&amp;rsquo;ll try to explain everything in a moment (if comments haven&amp;rsquo;t already).&lt;/p>
+&lt;p>Starting from the top, the I/O engine used is &lt;code>psync&lt;/code>, for the simple reason that it happens to be the default (in fact, we can even omit that line in the INI file). And since it appears to be a good fit for our use case, I didn&amp;rsquo;t feel the need to change it. If you&amp;rsquo;re concerned about what &lt;code>psync&lt;/code> actually does, you may want to look at &lt;code>pread(2)&lt;/code>&amp;rsquo;s man page, since that&amp;rsquo;s what &lt;code>psync&lt;/code> leverages behind the scenes. Here&amp;rsquo;s an excerpt:&lt;/p>
+&lt;blockquote>
+&lt;p>pread() reads up to count bytes from file descriptor fd at offset (from the start of the file) into the buffer starting at buf.&lt;/p>
+&lt;/blockquote>
+&lt;p>So far, so good.&lt;/p>
+&lt;p>The line &lt;code>readwrite=read&lt;/code> tells fio the type of I/O we want to perform. Because we just want to allocate memory, it makes sense to simply &lt;em>read&lt;/em> data into it. This is the default behavior, but sometimes explicit is better than implicit&lt;sup id="fnref:1">&lt;a href="#fn:1" class="footnote-ref" role="doc-noteref">1&lt;/a>&lt;/sup>.&lt;/p>
+&lt;p>Now come the interesting bits. First, there&amp;rsquo;s &lt;code>filename=/dev/zero&lt;/code>, which is a bit of a hack to avoid reading from a real file stored on disk. Not a big deal, but since we&amp;rsquo;re interested in just allocating a bunch of memory, why doing I/O at all? Especially if we can easily avoid it.&lt;/p>
+&lt;p>Then, we use a combination of &lt;code>size=1g&lt;/code> and &lt;code>lockmem=1g&lt;/code> to read 1GiB worth of zeros into memory &lt;em>and&lt;/em> keep that allocated. The need for &lt;code>lockmem&lt;/code> can be understood by running the same job &lt;em>without&lt;/em> &lt;code>lockmem&lt;/code> and inspecting its memory usage, perhaps with &lt;code>top&lt;/code> (you may need to tweak its configuration to display the relevant columns). The following figure highlights memory usage when &lt;code>lockmem&lt;/code> is &lt;em>not&lt;/em> used:&lt;/p>
+&lt;figure>
+&lt;img src="https://randthoughts.github.io/images/without-lockmem.png" alt="Memory usage without lockmem."/>
+&lt;figcaption>Memory usage without &lt;tt>lockmem&lt;/tt>.&lt;/figcaption>
+&lt;/figure>
+&lt;p>Not all memory is created equal: here we&amp;rsquo;re interested in the value of the &lt;code>RES&lt;/code> column, which stands for &lt;em>resident memory&lt;/em>. This value refers to the actual, &lt;em>physical&lt;/em> memory being allocated to the process, not counting swap. But how can it be (nearly) zero? I&amp;rsquo;m not super knowledgeable about the details, but generally speaking, what is happening here is that even though we are requesting to read 1GiB of data into memory, that amount is not wholly loaded into &lt;em>physical&lt;/em> memory. Instead, the OS acts as a middleman by effectively loading a fraction of it.&lt;/p>
+&lt;p>You may appreciate why this default behavior is a good thing for everyone; think about what would happen if every process was able to allocate physical memory at will. Not incidentally, the use of &lt;code>lockmem&lt;/code> requires root privileges.&lt;/p>
+&lt;p>Under the hood, &lt;code>lockmem&lt;/code> makes use of the &lt;code>mlock()&lt;/code> system call. Once again, &lt;code>man&lt;/code> comes to the rescue:&lt;/p>
+&lt;blockquote>
+&lt;p>mlock() [&amp;hellip;] lock[s] part or all of the calling process&amp;rsquo;s virtual address space into RAM, preventing that memory from being paged to the swap area.&lt;/p>
+&lt;/blockquote>
+&lt;p>What &lt;code>lockmem&lt;/code> essentially does is &amp;ldquo;pinning&amp;rdquo; the specified amount of memory to the physical memory. Indeed, if we run the job with &lt;code>lockmem=1g&lt;/code>, we can see that this time the &lt;code>RES&lt;/code> column reports the expected value:&lt;/p>
+&lt;figure>
+&lt;img src="https://randthoughts.github.io/images/with-lockmem.png" alt="Memory usage with lockmem."/>
+&lt;figcaption>Memory usage with &lt;tt>lockmem&lt;/tt>.&lt;/figcaption>
+&lt;/figure>
+&lt;p>We then have &lt;code>time_based=1&lt;/code> and &lt;code>runtime=5m&lt;/code>, which simply say: &lt;em>&amp;ldquo;Run this job for five minutes, whether or not we&amp;rsquo;re done with I/O work&amp;rdquo;&lt;/em>. Seems innocuous, right? Indeed, it does what we expect, but with a caveat: the CPU goes crazy for the entire job duration.&lt;/p>
+&lt;p>As with the unnecessary disk I/O&amp;mdash;which we avoided by reading from &lt;code>/dev/zero&lt;/code>&amp;mdash;I didn&amp;rsquo;t like the fact that a job intended to stress the memory generated a substantial amount of CPU workload. I think it&amp;rsquo;s good to keep things isolated so that we can test them independently.&lt;/p>
+&lt;p>After digging a bit in fio&amp;rsquo;s manual, my attention was drawn to the description of the &lt;code>time_based&lt;/code> parameter:&lt;/p>
+&lt;blockquote>
+&lt;p>If set, fio will run for the duration of the runtime specified even if the file(s) are completely read or written. &lt;strong>It will simply loop over the same workload as many times as the runtime allows.&lt;/strong>&lt;/p>
+&lt;/blockquote>
+&lt;p>If I understand it correctly, the job is busy reading from &lt;code>/dev/zero&lt;/code> over and over, even after the initial read of 1GiB is complete. This inevitably puts a toll on the CPU.&lt;/p>
+&lt;p>Fortunately, fio is a goldmine of parameters. In the last line of our workload definition, there&amp;rsquo;s this option called &lt;code>thinktime&lt;/code>, which, according to the manual, allows to &lt;em>&amp;ldquo;stall a job for the specified period of time after an I/O has completed before issuing the next&amp;rdquo;&lt;/em>. I discovered that setting &lt;code>thinktime&lt;/code> to &lt;em>any&lt;/em> value that is &lt;em>not&lt;/em> in microseconds, causes the job to stall &lt;em>indefinitely&lt;/em>&amp;mdash;unless &lt;code>time_based&lt;/code> and &lt;code>runtime&lt;/code> are also set, in which case the job is stopped after a fixed interval. While this is exactly what &lt;em>we&lt;/em> want, I&amp;rsquo;m not sure why fio behaves like that. Even if we agree that &lt;code>thinktime&lt;/code> should stall the job indefinitely&amp;mdash;because there&amp;rsquo;s no job to issue next&amp;mdash;why should the chosen unit of time matter?&lt;/p>
+&lt;p>Anyway, here&amp;rsquo;s an interesting comparison between the job running without and with &lt;code>thinktime&lt;/code> set:&lt;/p>
+&lt;figure>
+&lt;img src="https://randthoughts.github.io/images/cpu-without-thinktime.png" alt="CPU and memory usage without thinktime"/>
+&lt;figcaption>CPU and memory usage without &lt;tt>thinktime&lt;/tt>.&lt;/figcaption>
+&lt;/figure>
+&lt;figure>
+&lt;img src="https://randthoughts.github.io/images/cpu-with-thinktime.png" alt="CPU and memory usage with thinktime"/>
+&lt;figcaption>CPU and memory usage with &lt;tt>thinktime=1s&lt;/tt>.&lt;/figcaption>
+&lt;/figure>
+&lt;p>For the purpose of this visualization, I set &lt;code>runtime=30s&lt;/code> and &lt;code>size=4g&lt;/code>. You can see that with &lt;code>thinktime=1s&lt;/code>, the CPU is doing a significant amount of work only at the beginning and at the end of the job runtime, presumably because it&amp;rsquo;s busy loading/unloading data to/from memory.&lt;/p>
+&lt;p>Ouch! Seems we&amp;rsquo;ve hit EOF. Don&amp;rsquo;t forget to run fio as root, because &lt;code>lockmem&lt;/code> needs it. I hope this post brought something new to the table!&lt;/p>
+&lt;section class="footnotes" role="doc-endnotes">
+&lt;hr>
+&lt;ol>
+&lt;li id="fn:1" role="doc-endnote">
+&lt;p>&lt;a href="https://peps.python.org/pep-0020/#the-zen-of-python">https://peps.python.org/pep-0020/#the-zen-of-python&lt;/a>&amp;#160;&lt;a href="#fnref:1" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;/ol>
+&lt;/section></description></item><item><title>Random wallpaper with just bash and systemd</title><link>https://randthoughts.github.io/random-wallpaper-with-just-bash-and-systemd/</link><pubDate>Thu, 21 Jul 2022 17:08:41 +0200</pubDate><guid>https://randthoughts.github.io/random-wallpaper-with-just-bash-and-systemd/</guid><description>&lt;p>I&amp;rsquo;m a big fan of Variety&lt;sup id="fnref:1">&lt;a href="#fn:1" class="footnote-ref" role="doc-noteref">1&lt;/a>&lt;/sup>, probably the most popular wallpaper changer among Linux users. It&amp;rsquo;s been sitting in my GNOME desktop&amp;rsquo;s system tray for a long time. (Yes, I know GNOME doesn&amp;rsquo;t actually have a system tray, but I can&amp;rsquo;t live without it so I installed Ubuntu&amp;rsquo;s &lt;em>AppIndicator and KStatusNotifierItem Support&lt;/em> extension).&lt;/p>
 &lt;p>Recently, Variety started having some hiccups, for the simple reason that the API key it uses for Unsplash is shared among all Variety&amp;rsquo;s users, thus incurring rate limiting&lt;sup id="fnref:2">&lt;a href="#fn:2" class="footnote-ref" role="doc-noteref">2&lt;/a>&lt;/sup>. Since I don&amp;rsquo;t use most of Variety&amp;rsquo;s features, and I have only Unsplash enabled as image source, I scratched an itch by writing my own little wallpaper changer. Truth be told, it&amp;rsquo;s nothing fancy, but it does the job.&lt;/p>
 &lt;p>Here&amp;rsquo;s the Bash script (be sure to &lt;code>chmod +x&lt;/code> it before running):&lt;/p>
 &lt;div class="highlight">&lt;pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4">&lt;code class="language-bash" data-lang="bash">&lt;span style="color:#75715e">#!/usr/bin/env bash
